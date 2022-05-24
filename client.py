@@ -3,10 +3,36 @@ import socket
 from array import array
 from struct import unpack, pack
 from math import ceil
+import rsa
+import pickle
 
 __all__ = ["client", 'fc']
 
+PORT = 502
+BUFF = 1024
 
+# rsa encryption process
+def RsaEncrypt(strArray):
+    (PubKey, PrivateKey) = rsa.newkeys(128)
+    Encrypt_Str_Array = []
+    for data in strArray:
+        content = str(data).encode('utf8')
+        # Encryption of plaintext with public key
+        Encrypt_Str = rsa.encrypt(content, PubKey)
+        Encrypt_Str_Array.append(Encrypt_Str)
+    # Return the encrypted content and private key
+    return (Encrypt_Str_Array, PrivateKey)
+
+# rsa decryption process
+def RsaDecrypt(strArray, pk):
+    Decrypt_Str_Array = []
+    for data in strArray:
+        content = rsa.decrypt(data, pk)
+        content = content.decode('utf8')
+        content = int(content)
+        Decrypt_Str_Array.append(content)
+    return array('B', Decrypt_Str_Array)
+    
 def fc():
     print("Supported Function Codes:\n\
 	1 = Read Coils or Digital Outputs\n\
@@ -24,7 +50,7 @@ class client:
         self.host = host
         self.unit = unit
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect((host, 502))
+        self.sock.connect((host, PORT))
         self.TID = 0
 
     def read(self, FC=4, ADR=0, LEN=10):  # Default Read: Input Registers
@@ -44,9 +70,17 @@ class client:
             self.TID = 1
         cmd = array('B', [0, self.TID, 0, 0, 0, 6,
                           self.unit, FC, mADR, lADR, mLEN, lLEN])
-        self.sock.send(cmd)
-        buf = array('B', [0] * (BYT + 9))
-        self.sock.recv_into(buf)
+        (encryptdata, PrivateKey) = RsaEncrypt(cmd)
+        Message = pickle.dumps([encryptdata, PrivateKey]) 
+        self.sock.send(Message)   
+        
+        Received_Message = self.sock.recv(BUFF)
+        if Received_Message:
+            (recvdata, PrivateKey) = pickle.loads(Received_Message)
+        else:
+            return 
+        buf = RsaDecrypt(recvdata, PrivateKey)
+
         if (FC > 2):
             return unpack('>' + 'H' * LEN, buf[9:(9 + BYT)])
         else:
@@ -79,7 +113,17 @@ class client:
             cmd = array('B', [0, self.TID, 0, 0, 0, 7 + len(VAL),
                         self.unit, FC, mADR, lADR, mLEN, lLEN, len(VAL)])
         cmd.extend(VAL)
-        buffer = array('B', [0] * 20)
         print("Sent", cmd)
-        self.sock.send(cmd)
-        self.sock.recv_into(buffer)
+
+        (encryptdata, PrivateKey) = RsaEncrypt(cmd)
+        Message = pickle.dumps([encryptdata, PrivateKey]) 
+        self.sock.send(Message) 
+
+        Received_Message = self.sock.recv(BUFF)
+        # 如果接收到的内容非空
+        if Received_Message:
+            (recvdata, PrivateKey) = pickle.loads(Received_Message)
+        else:
+            return 
+        buffer = RsaDecrypt(recvdata, PrivateKey)
+
