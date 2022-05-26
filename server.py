@@ -1,4 +1,5 @@
-#!/usr/bin/python3
+ #coding : utf-8 
+import hashlib
 import socket
 import _thread
 from array import array
@@ -33,6 +34,20 @@ def RsaDecrypt(strArray, pk):
         Decrypt_Str_Array.append(content)
     return array('B', Decrypt_Str_Array)
 
+def md5hex(word):
+    """ 
+    MD5 encryption algorithm, 
+    returning 32-bit lowercase hexadecimal symbols 
+    for checksumming
+    """ 
+    # 如果word不是bytes类型
+    if not isinstance(word, bytes):
+        word = word.encode('utf-8')
+    m = hashlib.md5()
+    m.update(word)
+    return m.hexdigest().encode("utf-8")
+
+
 def TCP(conn, addr):
 	cnt = 0
 	hexOf = lambda BUFFER: ','.join([hex(i) for i in BUFFER])
@@ -41,8 +56,16 @@ def TCP(conn, addr):
 			Message = conn.recv(BUFF)
 			# Detects if the received data is empty
 			if Message:
-				(recvdata, PrivateKey) = pickle.loads(Message)
+				try:
+					Calibration = conn.recv(BUFF)
+					if Calibration == md5hex(Message):
+						print("校验成功")
+				except Exception as e:
+					print(e, "校验失败，内容可能被篡改")
+				else:	
+					(recvdata, PrivateKey) = pickle.loads(Message)
 			else:
+				print("Waiting......")
 				return 
 			buffer = RsaDecrypt(recvdata, PrivateKey)
 
@@ -81,6 +104,7 @@ def TCP(conn, addr):
 
 				if cnt < 60000: cnt = cnt + 1
 				else: cnt = 1
+				
 			elif (FC in [5, 6, 15, 16]):  # Write Registers
 				cmd = array('B', [TID0, TID1, 0, 0, 0, 6, ID, FC, mADR, lADR, buffer[10], buffer[11]])
 				(encryptdata, PrivateKey) = RsaEncrypt(cmd)
@@ -115,4 +139,3 @@ if __name__ == '__main__':
 		ConSock,addr = ServerSock.accept()
 		print(f'Connected successfully by {addr[0]}' + '\n')
 		_thread.start_new_thread(TCP, (ConSock, addr))
-

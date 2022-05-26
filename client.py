@@ -1,10 +1,12 @@
-#!/usr/bin/python3
+ #coding : utf-8 
+import hashlib
 import socket
 from array import array
 from struct import unpack, pack
 from math import ceil
 import rsa
 import pickle
+import time
 
 __all__ = ["client", 'fc']
 
@@ -33,6 +35,20 @@ def RsaDecrypt(strArray, pk):
         Decrypt_Str_Array.append(content)
     return array('B', Decrypt_Str_Array)
     
+def md5hex(word):
+    """ 
+    MD5 encryption algorithm, 
+    returning 32-bit lowercase hexadecimal symbols 
+    for checksumming
+    """ 
+    # 如果word不是bytes类型
+    if not isinstance(word, bytes):
+        word = word.encode('utf-8')
+    m = hashlib.md5()
+    m.update(word)
+    return m.hexdigest().encode("utf-8")
+
+
 def fc():
     print("Supported Function Codes:\n\
 	1 = Read Coils or Digital Outputs\n\
@@ -73,6 +89,9 @@ class client:
         (encryptdata, PrivateKey) = RsaEncrypt(cmd)
         Message = pickle.dumps([encryptdata, PrivateKey]) 
         self.sock.send(Message)   
+        time.sleep(0.2)
+        self.sock.send(md5hex(Message))
+        
         
         Received_Message = self.sock.recv(BUFF)
         if Received_Message:
@@ -118,9 +137,11 @@ class client:
         (encryptdata, PrivateKey) = RsaEncrypt(cmd)
         Message = pickle.dumps([encryptdata, PrivateKey]) 
         self.sock.send(Message) 
+        time.sleep(0.2)
+        self.sock.send(md5hex(Message)) # Send check digit
 
         Received_Message = self.sock.recv(BUFF)
-        # 如果接收到的内容非空
+        # If the received content is not empty
         if Received_Message:
             (recvdata, PrivateKey) = pickle.loads(Received_Message)
         else:
